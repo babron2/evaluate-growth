@@ -82,7 +82,7 @@ with st.expander("利用規約", expanded=False):
 
 # ラベルとデフォルトの日付を指定して、日付入力を作成する
 st.markdown("## お子さまのニックネームを入力してください")
-name = st.text_input("ニックネーム", "たろちゃん")
+name = st.text_input("ニックネーム", "")
 
 st.markdown("## お子さまの誕生日を入力してださい。")
 to_day = date.today()
