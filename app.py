@@ -3,7 +3,6 @@ import streamlit as st
 from datetime import datetime, timedelta, date
 from gcp_modules import Gcs_client
 
-
 st.markdown(
     """
     <style>
