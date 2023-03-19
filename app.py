@@ -82,6 +82,9 @@ with st.expander("利用規約", expanded=False):
     )
 
 # ラベルとデフォルトの日付を指定して、日付入力を作成する
+st.markdown("## お子さまのニックネームを入力してください")
+name = st.text_input("ニックネーム", "たろちゃん")
+
 st.markdown("## お子さまの誕生日を入力してださい。")
 to_day = date.today()
 year = st.selectbox(
@@ -93,79 +96,88 @@ date_string = f"{year}-{month}-{day}"
 birth_day = datetime.strptime(date_string, "%Y-%m-%d").date()
 past_month = round((to_day - birth_day).days / 30)
 # 現在の前後の発達行動
-pre_month_denver = {
-    key: "pre"
-    for key, value in growth_dic.items()
-    if past_month - 3 <= value <= past_month
-}
-post_month_denver = {
-    key: "post"
-    for key, value in growth_dic.items()
-    if past_month + 1 <= value <= past_month + 2
-}
+month_growth = {}
+pre_count = 0
+for key, value in growth_dic.items():
+    if past_month - 3 <= value <= past_month:
+        month_growth[key] = "pre"
+        pre_count += 1
+    elif past_month + 1 <= value <= past_month + 2:
+        month_growth[key] = "post"
 
-month_denver = {**pre_month_denver, **post_month_denver}
-
-st.markdown(f"## 現在可能な動きや行動を選択して下さい。月齢:{past_month}ヶ月")
-# 発達チェック
-ok_num = 0  # チェックボックスの初期値をFalseに設定
-ok_list = []
-not_ok_list = []
-for growth, label in month_denver.items():
-    print(growth, label)
-    check = st.checkbox(f"{growth}")
-    if check:
-        # すでにできている行動
-        ok_list.append(growth)
-    elif label == "pre":  # アドバンスな動きは判定しない
-        not_ok_list.append(growth)
-    # できた数を数える
-    ok_num += check
-
-if st.button("発達判定"):
-    if ok_num <= len(pre_month_denver) // 2:
-        st.write("少し発達がゆっくりです。心配な場合は、専門家にご相談ください。")
-        lag_month = 2
+if not st.session_state.get("button", False):
+    push_button = st.button("次へ進む")
+else:
+    push_button = True
+if push_button:
+    if past_month > 16:
+        st.markdown("予報可能な月齢は16ヶ月までです")
     else:
-        st.write("順調に発達しています。")
-        lag_month = 0
+        st.session_state.button = push_button
+        st.markdown(f"## {name}さんが現在可能な動きや行動を選択して下さい。月齢:{past_month}ヶ月")
+        # 発達チェック
+        ok_num = 0  # チェックボックスの初期値をFalseに設定
+        ok_list = []
+        not_ok_list = []
+        for growth, label in month_growth.items():
+            check = st.checkbox(f"{growth}")
+            if check:
+                # すでにできている行動
+                ok_list.append(growth)
+            elif label == "pre":  # アドバンスな動きは判定しない
+                not_ok_list.append(growth)
+            # できた数を数える
+            ok_num += check
 
-    st.markdown("### これからの発達予報")
-    growth_predict = {}
-    first_count = 0
-    for key, value in growth_dic.items():
-        # 経過月以降の発達行動
-        if value < past_month:
-            continue
-        # 日付を足し算する
-        pred_day = birth_day + timedelta(days=30 * value)
-        year = pred_day.year
-        month = pred_day.month + lag_month
-        label = f"{year}年{month}月"
-        if first_count == 0:
-            key = "\n".join(not_ok_list + [key])
-        growth_predict[label] = growth_predict.get(label, "") + f"\n{key}"
-        first_count += 1
+    if not st.session_state.get("yohou", False):
+        push_yohou = st.button("予報開始")
+    else:
+        push_yohou = True
+    if push_yohou:
+        st.markdown(f"### 結果")
+        st.session_state.yohou = push_yohou
+        if ok_num <= pre_count // 2:
+            st.write("少し発達がゆっくりです。心配な場合は、専門家にご相談ください。")
+            lag_month = 2
+        else:
+            st.write("順調に発達しています。")
+            lag_month = 0
 
-    for label, value in growth_predict.items():
-        col = st.columns(1)[0]
-        with col:
-            st.markdown(f"### {label}")
-            for v in value.split():
-                st.text(v)
+        st.markdown(f"### {name}さんの発達予報")
+        growth_predict = {}
+        first_count = 0
+        for key, value in growth_dic.items():
+            # 経過月以降の発達行動
+            if value <= past_month:
+                continue
+            # 日付を足し算する
+            pred_day = birth_day + timedelta(days=30 * value)
+            year = pred_day.year
+            month = pred_day.month + lag_month
+            label = f"{year}年{month}月"
+            if first_count == 0:
+                key = "\n".join(not_ok_list + [key])
+            growth_predict[label] = growth_predict.get(label, "") + f"\n{key}"
+            first_count += 1
 
-    ts = int(datetime.timestamp(datetime.now()))
-    # gcに記録
-    gc = Gcs_client()
+        for label, value in growth_predict.items():
+            col = st.columns(1)[0]
+            with col:
+                st.markdown(f"### {label}")
+                for v in value.split():
+                    st.text(v)
 
-    dict_json = {
-        "timestamp": [ts],
-        "birth_day": [str(birth_day)],
-        "evaluate_day": [str(to_day)],
-        "growth_month": [past_month],
-        "ok_list": ok_list,
-        "not_ok_list": not_ok_list,
-    }
-
-    growth_data = json.dumps(dict_json)
-    gc.upload_gcs("growth-data", growth_data, f"{ts}.json", dry_run=False)
+        # gcに記録
+        ts = int(datetime.timestamp(datetime.now()))
+        info_json = {
+            "timestamp": [ts],
+            "name": [name],
+            "birth_day": [str(birth_day)],
+            "evaluate_day": [str(to_day)],
+            "growth_month": [past_month],
+            "ok_list": ok_list,
+            "not_ok_list": not_ok_list,
+        }
+        gc = Gcs_client()
+        growth_data = json.dumps(info_json)
+        gc.upload_gcs("growth-data", growth_data, f"{ts}.json", dry_run=False)
